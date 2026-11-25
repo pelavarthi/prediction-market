@@ -24,6 +24,17 @@ go run ./cmd/server
 
 Then `curl localhost:8080/health` should return `{"status":"ok"}`.
 
+## Pricing
+
+The line is set by the market maker, not by matching buyers and sellers.
+Buying shares costs `C(q + x) - C(q)`, where `C` is the LMSR cost function,
+so a big order pays a worse average price than a small one: the line moves
+while the trade fills. `Market.QuoteBuy` / `QuoteSell` price a trade without
+moving the market; `Buy` / `Sell` apply it. `ImpactCurve` shows how the
+price bends as a buy fills, and `LossIf` / `MaxLoss` show the market
+maker's exposure: its worst-case loss is always at most `b * ln(2)`. Small
+`b` means a twitchy line, large `b` means a deep market.
+
 ## Test it
 
 ```sh
