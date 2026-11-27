@@ -35,6 +35,16 @@ price bends as a buy fills, and `LossIf` / `MaxLoss` show the market
 maker's exposure: its worst-case loss is always at most `b * ln(2)`. Small
 `b` means a twitchy line, large `b` means a deep market.
 
+## Cash-out
+
+A trader does not have to wait for settlement. `Ledger.CashOut` sells
+shares back to the market maker at the current price: the proceeds are
+`C(q) - C(q - x)`, minus the same 1% fee as a buy, and the sale moves the
+line back the other way. Partial cash-outs are allowed, and each position
+tracks the average price its shares were bought at, so a cash-out reports
+realized profit or loss against what was actually paid. `QuoteCashOut`
+prices a cash-out without moving anything.
+
 ## Test it
 
 ```sh

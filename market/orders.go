@@ -26,11 +26,15 @@ type Order struct {
 	PlacedAt   time.Time
 }
 
-// Position is one user's holding in one market.
+// Position is one user's holding in one market. AvgCostYes and AvgCostNo
+// are the average price paid per share on each side, before fees — the
+// cost basis a cash-out measures profit against.
 type Position struct {
-	MarketID string
-	Yes      float64
-	No       float64
+	MarketID   string
+	Yes        float64
+	No         float64
+	AvgCostYes float64
+	AvgCostNo  float64
 }
 
 // Shares returns the holding on one side of the market.
@@ -41,11 +45,19 @@ func (p Position) Shares(o Outcome) float64 {
 	return p.No
 }
 
+// AvgCost returns the average price paid per share on one side.
+func (p Position) AvgCost(o Outcome) float64 {
+	if o == Yes {
+		return p.AvgCostYes
+	}
+	return p.AvgCostNo
+}
+
 // Entry is one line in a user's balance ledger: every credit and debit, so
 // the balance can always be rebuilt by summing the entries.
 type Entry struct {
-	Kind         string  // "deposit", "buy", "fee"
-	Amount       float64 // signed: deposits positive, buys and fees negative
+	Kind         string  // "deposit", "buy", "cashout", "fee"
+	Amount       float64 // signed: deposits and cash-outs positive, buys and fees negative
 	BalanceAfter float64 // balance right after this entry
 	At           time.Time
 }
@@ -59,15 +71,16 @@ type Account struct {
 	Ledger    []Entry
 }
 
-// Ledger is where orders live: the accounts, the filled orders, and the
-// store the markets sit in. One mutex serializes order placement, so the
-// quote, the line move, and the balance debit happen as one step and two
-// buyers can never trade on the same stale price.
+// Ledger is where orders live: the accounts, the filled orders and
+// cash-outs, and the store the markets sit in. One mutex serializes order
+// placement, so the quote, the line move, and the balance debit happen as
+// one step and two buyers can never trade on the same stale price.
 type Ledger struct {
 	mu       sync.Mutex
 	store    *Store
 	accounts map[string]*Account
 	orders   []*Order
+	cashouts []*CashOut
 	nextID   int
 }
 
@@ -184,10 +197,14 @@ func (l *Ledger) PlaceBuy(userID, marketID string, o Outcome, shares float64) (*
 		pos = &Position{MarketID: marketID}
 		a.Positions[marketID] = pos
 	}
+	// Fold the new shares into the average cost, so the position always
+	// knows what its shares were bought for.
 	switch o {
 	case Yes:
+		pos.AvgCostYes = (pos.Yes*pos.AvgCostYes + q.Cost) / (pos.Yes + shares)
 		pos.Yes += shares
 	case No:
+		pos.AvgCostNo = (pos.No*pos.AvgCostNo + q.Cost) / (pos.No + shares)
 		pos.No += shares
 	}
 	l.orders = append(l.orders, order)
